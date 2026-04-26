@@ -11,6 +11,7 @@ st.title("📦 庫存管理與智慧建議系統")
 
 # --- 讀取資料函式 ---
 def load_data_from_gs(sheet_name):
+    # 修正後的網址格式
     url = f"https://google.com{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
     try:
         return pd.read_csv(url)
@@ -28,6 +29,18 @@ with st.sidebar:
     st.header("⚙️ 系統設定")
     line_token = st.text_input("LINE Notify Token", type="password")
     buffer_days = st.slider("建議補貨緩衝天數", 1, 30, 7)
+    st.divider()
+    st.header("☁️ 雲端同步中心")
+    if st.button("🚀 將目前數據同步回 Google"):
+        try:
+            # 這裡使用 st.connection (需先設定 secrets.toml)
+            # conn = st.connection("gsheets", type=GSheetsConnection)
+            # conn.update(spreadsheet=SHEET_URL, worksheet="庫存表", data=st.session_state.df_inv)
+            st.warning("同步功能需要設定 Google API 金鑰 (Secrets)。")
+            st.info("目前您可以先手動下載 CSV 並貼回試算表：")
+            st.download_button("下載最新庫存表", st.session_state.df_inv.to_csv(index=False).encode('utf-8-sig'), "new_inv.csv")
+        except:
+            st.error("同步連線失敗，請檢查金鑰設定。")
     
     st.divider()
     st.header("📂 批次更新資料")
@@ -73,12 +86,12 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
 
         expiry_info = []
         suggestions = []
-        
+
         # 去年同期範圍 (計算用)
         last_year_today = today - timedelta(days=365)
         start_date = last_year_today - timedelta(days=15)
         end_date = last_year_today + timedelta(days=15)
-
+        
         for _, row in df_inv.iterrows():
             name = row['物品名稱']
             qty = row['目前數量']
@@ -98,6 +111,56 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
                 needed = round(avg_daily * buffer_days)
                 if qty < needed:
                     suggestions.append(f"📦 **{name}**: 建議補至 {needed} (目前 {qty})")
+    with tab2:
+    st.subheader("📉 新增作廢紀錄")
+    if not st.session_state.df_inv.empty:
+        with st.form("scrap_form"):
+            # 取得物品選單
+            items = st.session_state.df_inv['物品名稱'].tolist()
+            selected_item = st.selectbox("選擇作廢物品", items)
+            qty = st.number_input("作廢數量", min_value=1, step=1)
+            reason = st.text_input("作廢原因 (如：過期、包裝破損)")
+            
+            if st.form_submit_button("提交作廢"):
+                # 執行扣除庫存邏輯
+                idx = st.session_state.df_inv[st.session_state.df_inv['物品名稱'] == selected_item].index
+                if st.session_state.df_inv.at[idx[0], '目前數量'] >= qty:
+                    st.session_state.df_inv.at[idx[0], '目前數量'] -= qty
+                    
+                    # 建立作廢紀錄
+                    new_log = pd.DataFrame([{
+                        '日期': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                        '物品名稱': selected_item,
+                        '數量': qty,
+                        '原因': reason
+                    }])
+                    
+                    # 初始化或合併紀錄
+                    if 'df_scrap' not in st.session_state:
+                        st.session_state.df_scrap = new_log
+                    else:
+                        st.session_state.df_scrap = pd.concat([st.session_state.df_scrap, new_log], ignore_index=True)
+                    
+                    st.success(f"✅ 已成功作廢 {selected_item} {qty} 件，庫存已更新！")
+                    st.rerun()
+                else:
+                    st.error("❌ 庫存不足，無法作廢！")
+    else:
+        st.warning("請先完成庫存資料載入")
+    
+with tab3:
+    st.subheader("📜 歷史作廢紀錄查詢")
+    if 'df_scrap' in st.session_state and not st.session_state.df_scrap.empty:
+        # 加入搜尋過濾功能
+        search_key = st.text_input("🔍 搜尋物品名稱或原因")
+        display_df = st.session_state.df_scrap
+        
+        if search_key:
+            display_df = display_df[display_df['物品名稱'].str.contains(search_key) | display_df['原因'].str.contains(search_key)]
+            
+        st.dataframe(display_df.sort_index(ascending=False), use_container_width=True)
+    else:
+        st.info("目前尚無作廢紀錄。")
 
         # --- 修正後的顯示區域 ---
         c1, c2 = st.columns(2)
