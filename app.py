@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 # --- 設定區 ---
 # 建議將來串接 Google Sheets ID
-SHEET_ID = "您的_GOOGLE_SHEET_ID_貼在這邊" 
+SHEET_ID = "1_Dg2nnIkcus0ME8fNx5HRdKUzcPGlsSVAphJzut7W1I"
 
 st.set_page_config(page_title="庫存智能管家", layout="wide")
 st.title("📦 庫存管理與智慧建議系統")
