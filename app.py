@@ -1,14 +1,44 @@
 import streamlit as st
+import gspread
 import pandas as pd
+from oauth2client.service_account import ServiceAccountCredentials
 import requests
 from datetime import datetime, timedelta
 
 # --- 設定區 ---
 SHEET_ID = "1_Dg2nnIkcus0ME8fNx5HRdKUzcPGlsSVAphJzut7W1I"
-
+JSON_KEY = "credentials.json" 
 st.set_page_config(page_title="庫存智能管家", layout="wide")
 st.title("📦 庫存管理與智慧建議系統")
 
+def upload_to_gsheets(file_path, sheet_name):
+    """將 Excel 檔案內容上傳到特定的 Google Sheets 頁籤"""
+    try:
+        # 認證與連線
+        scope = ["https://google.com", "https://googleapis.com"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(JSON_KEY, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SHEET_ID).worksheet(sheet_name)
+
+        # 讀取地端 Excel
+        df = pd.read_excel(file_path)
+        # 處理資料夾雜 NaN 的問題 (轉為空字串)
+        df = df.fillna("")
+        
+        # 清空雲端原本的內容並寫入新內容
+        sheet.clear()
+        sheet.update([df.columns.values.tolist()] + df.values.tolist())
+        
+        print(f"✅ 成功將 {file_path} 上傳至雲端分頁：{sheet_name}")
+    except Exception as e:
+        print(f"❌ 上傳失敗: {e}")
+# --- 執行上傳 ---
+if __name__ == "__main__":
+    # 上傳庫存表
+    upload_to_gsheets("庫存表.xlsx", "庫存表")
+    
+    # 上傳營業紀錄
+    upload_to_gsheets("營業紀錄.xlsx", "營業紀錄")
 # --- 讀取資料函式 ---
 def load_data_from_gs(sheet_name):
     url = f"https://google.com{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
