@@ -111,6 +111,35 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
                 needed = round(avg_daily * buffer_days)
                 if qty < needed:
                     suggestions.append(f"📦 **{name}**: 建議補至 {needed} (目前 {qty})")
+         # --- 修正後的顯示區域 ---
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("#### 🔔 效期預警")
+            if expiry_info:
+                for m in expiry_info:
+                    st.warning(m)
+            else:
+                st.write("✅ 效期皆在正常範圍內")
+        
+        with c2:
+            st.markdown("#### 💡 叫貨建議")
+            if suggestions:
+                for s in suggestions:
+                    st.info(s)
+            else:
+                st.write("✅ 庫存水平充足")
+
+        # LINE 通知
+        if st.button("發送手機通知 (LINE)"):
+            if line_token:
+                full_msg = "\n【效期預警】\n" + "\n".join(expiry_info) if expiry_info else "\n效期正常"
+                full_msg += "\n\n【叫貨建議】\n" + "\n".join(suggestions) if suggestions else "\n無需補貨"
+                requests.post("https://line.me", 
+                              headers={"Authorization": f"Bearer {line_token}"}, 
+                              data={"message": full_msg})
+                st.success("通知已送出！")
+            else:
+                st.error("請輸入 LINE Token")    
     with tab2:
         st.subheader("📉 新增作廢紀錄")
         if not st.session_state.df_inv.empty:
@@ -161,36 +190,6 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
             st.dataframe(display_df.sort_index(ascending=False), use_container_width=True)
         else:
             st.info("目前尚無作廢紀錄。")
-
-        # --- 修正後的顯示區域 ---
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("#### 🔔 效期預警")
-            if expiry_info:
-                for m in expiry_info:
-                    st.warning(m)
-            else:
-                st.write("✅ 效期皆在正常範圍內")
-        
-        with c2:
-            st.markdown("#### 💡 叫貨建議")
-            if suggestions:
-                for s in suggestions:
-                    st.info(s)
-            else:
-                st.write("✅ 庫存水平充足")
-
-        # LINE 通知
-        if st.button("發送手機通知 (LINE)"):
-            if line_token:
-                full_msg = "\n【效期預警】\n" + "\n".join(expiry_info) if expiry_info else "\n效期正常"
-                full_msg += "\n\n【叫貨建議】\n" + "\n".join(suggestions) if suggestions else "\n無需補貨"
-                requests.post("https://line.me", 
-                              headers={"Authorization": f"Bearer {line_token}"}, 
-                              data={"message": full_msg})
-                st.success("通知已送出！")
-            else:
-                st.error("請輸入 LINE Token")
 
 else:
     st.info("💡 尚未讀取到庫存資料。請在側邊欄上傳 Excel/CSV，或檢查 Google Sheets ID 是否正確。")
