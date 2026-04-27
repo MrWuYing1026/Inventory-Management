@@ -170,7 +170,7 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
                             st.session_state.df_inv.loc[idx[0], '目前數量'] = current_qty - qty
             
                             # 建立紀錄
-                               new_log = pd.DataFrame([{
+                        new_log = pd.DataFrame([{
                             '日期': datetime.now().strftime('%Y-%m-%d %H:%M'),
                             '物品名稱': selected_item,
                             '數量': qty,
