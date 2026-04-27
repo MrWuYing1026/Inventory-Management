@@ -140,6 +140,14 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
                 st.success("通知已送出！")
             else:
                 st.error("請輸入 LINE Token")    
+        # 下載按鈕必須放在 st.rerun() 之後能讀取到的地方
+        st.download_button(
+            label="📥 下載最新庫存表 (Excel備份)",
+            data=st.session_state.df_inv.to_csv(index=False).encode('utf-8-sig'),
+            file_name=f"庫存更新_{datetime.now().strftime('%m%d_%H%M')}.csv",
+            mime="text/csv"
+        )
+
     with tab2:
         st.subheader("📉 新增作廢紀錄")
         if not st.session_state.df_inv.empty:
@@ -150,46 +158,38 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
                 qty = st.number_input("作廢數量", min_value=1, step=1)
                 reason = st.text_input("作廢原因 (如：過期、包裝破損)")
                 if st.form_submit_button("提交作廢"):
-                    # 1. 執行扣除庫存邏輯
-                    # 取得該物品在資料表中的索引
+                    # 找到對應的索引
                     idx = st.session_state.df_inv[st.session_state.df_inv['物品名稱'] == selected_item].index
-            
+    
                     if not idx.empty:
-                        # 取得目前數量並進行判斷
-                        current_qty = st.session_state.df_inv.at[idx[0], '目前數量']
-                
+                        # 取得目前數量 (轉換為整數確保計算正確)
+                        current_qty = int(st.session_state.df_inv.loc[idx[0], '目前數量'])
+        
                         if current_qty >= qty:
-                            # --- 關鍵：修改記憶體中的數量 ---
-                            st.session_state.df_inv.at[idx[0], '目前數量'] -= qty
-                    
-                            # 2. 建立作廢紀錄
-                            new_log = pd.DataFrame([{
-                                '日期': datetime.now().strftime('%Y-%m-%d %H:%M'),
-                                '物品名稱': selected_item,
-                                '數量': qty,
-                                '原因': reason
-                            }])
-                    
-                            # 3. 合併作廢紀錄
-                            if 'df_scrap' not in st.session_state or st.session_state.df_scrap.empty:
-                                st.session_state.df_scrap = new_log
-                            else:
-                                st.session_state.df_scrap = pd.concat([st.session_state.df_scrap, new_log], ignore_index=True)
+                            # --- 關鍵修正：直接修改 session_state 並強制轉換型態 ---
+                            st.session_state.df_inv.loc[idx[0], '目前數量'] = current_qty - qty
+            
+                            # 建立紀錄
+                               new_log = pd.DataFrame([{
+                            '日期': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                            '物品名稱': selected_item,
+                            '數量': qty,
+                            '原因': reason
+                        }])
+            
+                        # 更新紀錄表
+                        st.session_state.df_scrap = pd.concat([st.session_state.df_scrap, new_log], ignore_index=True)
+            
+                        # --- 💡 這裡加入同步雲端 (若您已設定 conn) ---
+                        try:
+                            conn.update(spreadsheet=SHEET_URL, worksheet="庫存表", data=st.session_state.df_inv)
+                            st.success("✅ 雲端數量已同步更新！")
+                        except:
+                            st.warning("⚠️ 本地數量已改，但雲端同步失敗，請手動下載存檔。")
 
-                            # --- 4. 自動同步至雲端 (如果您已設定好 conn) ---
-                            try:
-                                # 更新雲端的【庫存表】
-                                conn.update(spreadsheet=SHEET_URL, worksheet="庫存表", data=st.session_state.df_inv)
-                                # 更新雲端的【作廢紀錄】
-                                conn.update(spreadsheet=SHEET_URL, worksheet="作廢紀錄", data=st.session_state.df_scrap)
-                                st.success(f"✅ 已成功作廢 {selected_item} {qty} 件，資料已同步至雲端！")
-                            except Exception as e:
-                                st.warning(f"⚠️ 庫存已本地更新，但雲端同步失敗: {e}")
-                    
-                            # 5. 強制重新整理頁面顯示新數據
-                            st.rerun()
-                        else:
-                            st.error(f"❌ 庫存不足！目前僅剩 {current_qty}，無法作廢 {qty}。")
+                        st.rerun() # 強制刷新，確保下載按鈕抓到的是最新版
+                    else:
+                        st.error("庫存不足")
 
     with tab3:
         st.subheader("📜 歷史作廢紀錄查詢")
