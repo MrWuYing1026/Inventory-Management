@@ -149,34 +149,48 @@ if st.session_state.df_inv is not None and not st.session_state.df_inv.empty:
                 selected_item = st.selectbox("選擇作廢物品", items)
                 qty = st.number_input("作廢數量", min_value=1, step=1)
                 reason = st.text_input("作廢原因 (如：過期、包裝破損)")
-            
                 if st.form_submit_button("提交作廢"):
-                    # 執行扣除庫存邏輯
+                    # 1. 執行扣除庫存邏輯
+                    # 取得該物品在資料表中的索引
                     idx = st.session_state.df_inv[st.session_state.df_inv['物品名稱'] == selected_item].index
-                    if st.session_state.df_inv.at[idx[0], '目前數量'] >= qty:
-                        st.session_state.df_inv.at[idx[0], '目前數量'] -= qty
+            
+                    if not idx.empty:
+                        # 取得目前數量並進行判斷
+                        current_qty = st.session_state.df_inv.at[idx[0], '目前數量']
+                
+                        if current_qty >= qty:
+                            # --- 關鍵：修改記憶體中的數量 ---
+                            st.session_state.df_inv.at[idx[0], '目前數量'] -= qty
                     
-                        # 建立作廢紀錄
-                        new_log = pd.DataFrame([{
-                            '日期': datetime.now().strftime('%Y-%m-%d %H:%M'),
-                            '物品名稱': selected_item,
-                            '數量': qty,
-                            '原因': reason
-                        }])
+                            # 2. 建立作廢紀錄
+                            new_log = pd.DataFrame([{
+                                '日期': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                                '物品名稱': selected_item,
+                                '數量': qty,
+                                '原因': reason
+                            }])
                     
-                        # 初始化或合併紀錄
-                        if 'df_scrap' not in st.session_state:
-                            st.session_state.df_scrap = new_log
+                            # 3. 合併作廢紀錄
+                            if 'df_scrap' not in st.session_state or st.session_state.df_scrap.empty:
+                                st.session_state.df_scrap = new_log
+                            else:
+                                st.session_state.df_scrap = pd.concat([st.session_state.df_scrap, new_log], ignore_index=True)
+
+                            # --- 4. 自動同步至雲端 (如果您已設定好 conn) ---
+                            try:
+                                # 更新雲端的【庫存表】
+                                conn.update(spreadsheet=SHEET_URL, worksheet="庫存表", data=st.session_state.df_inv)
+                                # 更新雲端的【作廢紀錄】
+                                conn.update(spreadsheet=SHEET_URL, worksheet="作廢紀錄", data=st.session_state.df_scrap)
+                                st.success(f"✅ 已成功作廢 {selected_item} {qty} 件，資料已同步至雲端！")
+                            except Exception as e:
+                                st.warning(f"⚠️ 庫存已本地更新，但雲端同步失敗: {e}")
+                    
+                            # 5. 強制重新整理頁面顯示新數據
+                            st.rerun()
                         else:
-                            st.session_state.df_scrap = pd.concat([st.session_state.df_scrap, new_log], ignore_index=True)
-                    
-                        st.success(f"✅ 已成功作廢 {selected_item} {qty} 件，庫存已更新！")
-                        st.rerun()
-                    else:
-                        st.error("❌ 庫存不足，無法作廢！")
-        else:
-            st.warning("請先完成庫存資料載入")
-    
+                            st.error(f"❌ 庫存不足！目前僅剩 {current_qty}，無法作廢 {qty}。")
+
     with tab3:
         st.subheader("📜 歷史作廢紀錄查詢")
         if 'df_scrap' in st.session_state and not st.session_state.df_scrap.empty:
