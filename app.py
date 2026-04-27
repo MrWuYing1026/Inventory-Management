@@ -36,7 +36,7 @@ with st.sidebar:
             # 這裡使用 st.connection (需先設定 secrets.toml)
             # conn = st.connection("gsheets", type=GSheetsConnection)
             # conn.update(spreadsheet=SHEET_URL, worksheet="庫存表", data=st.session_state.df_inv)
-            st.warning("同步功能需要設定 Google API 金鑰 (Secrets)。")
+            st.warning("同步功能測試中")
             st.info("目前您可以先手動下載 CSV 並貼回試算表：")
             st.download_button("下載最新庫存表", st.session_state.df_inv.to_csv(index=False).encode('utf-8-sig'), "new_inv.csv")
         except:
