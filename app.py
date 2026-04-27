@@ -23,6 +23,18 @@ if 'df_inv' not in st.session_state:
     st.session_state.df_inv = load_data_from_gs("庫存表")
 if 'df_sales' not in st.session_state:
     st.session_state.df_sales = load_data_from_gs("營業紀錄")
+    # --- 確保這段程式碼在你的主要邏輯執行前有跑過 ---
+if 'df_scrap' not in st.session_state:
+    # 嘗試從雲端讀取，如果沒有就建立一個空的表格
+    try:
+        st.session_state.df_scrap = load_data_from_gs("作廢紀錄")
+    except:
+        st.session_state.df_scrap = pd.DataFrame(columns=['日期', '物品名稱', '數量', '原因'])
+
+# 如果讀進來發現是空的，也要確保它有正確的欄位名稱
+if st.session_state.df_scrap is None or st.session_state.df_scrap.empty:
+    st.session_state.df_scrap = pd.DataFrame(columns=['日期', '物品名稱', '數量', '原因'])
+
 
 # --- 側邊欄：設定與上傳 ---
 with st.sidebar:
